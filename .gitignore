@@ -168,3 +168,5 @@ cython_debug/
 # Project specific
 examples/config.py
 examples/exports/
+config.py
+exports/

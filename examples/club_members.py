@@ -13,6 +13,12 @@ parser = argparse.ArgumentParser(
     description="Fetches club members from Spond Club (club/v1/members) and exports to club_members.csv"
 )
 parser.add_argument(
+    "-l",
+    "--list-clubs",
+    help="List accessible Spond Clubs (name, id, shortId) and exit",
+    action="store_true",
+)
+parser.add_argument(
     "-u",
     "--unprocessed",
     help="Only fetch unprocessed (pending) members",
@@ -28,19 +34,45 @@ parser.add_argument(
 args = parser.parse_args()
 
 
+async def _resolve_club_id(s: SpondClub, configured_id: str) -> str | None:
+    """Resolve `configured_id` (full id, shortId, or name) to the club's full UUID `id`."""
+    if (
+        configured_id
+        and configured_id != "1234567890"
+        and len(configured_id) == 32
+        and all(c in "0123456789ABCDEFabcdef" for c in configured_id)
+    ):
+        return configured_id
+
+    clubs = await s.get_clubs()
+    if not clubs:
+        return None
+
+    for c in clubs:
+        if configured_id in (c.get("id"), c.get("shortId"), c.get("name")):
+            print(f"Resolved club '{configured_id}' -> {c.get('name')} (id={c['id']})")
+            return c["id"]
+
+    fallback = clubs[0]
+    print(f"Using discovered club: {fallback.get('name')} (id={fallback['id']})")
+    return fallback["id"]
+
+
 async def main() -> None:
     s = SpondClub(username=username, password=password)
     try:
-        target_club_id = club_id
-        if not target_club_id or target_club_id == "1234567890":
+        if args.list_clubs:
             clubs = await s.get_clubs()
-            if not clubs:
-                print("No Spond Clubs found for this account.")
-                return
-            target_club_id = clubs[0]["id"]
-            print(
-                f"Using discovered club: {clubs[0].get('name')} (id={target_club_id})"
-            )
+            for c in clubs:
+                print(
+                    f"Name: {c.get('name')} | id: {c.get('id')} | shortId: {c.get('shortId')}"
+                )
+            return
+
+        target_club_id = await _resolve_club_id(s, club_id)
+        if not target_club_id:
+            print("No Spond Clubs found for this account.")
+            return
 
         if args.unprocessed:
             members = await s.get_members(
