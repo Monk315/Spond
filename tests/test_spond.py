@@ -1,4 +1,4 @@
-"""Test suite for Spond class."""
+"""Test suite for Spond and SpondClub classes."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import pytest
 
 from spond import AuthenticationError
 from spond.base import _SpondBase
+from spond.club import SpondClub
 from spond.spond import Spond
 
 if TYPE_CHECKING:
@@ -507,6 +508,10 @@ class TestLogin:
                 {"accessToken": {"token": "ABC", "expiration": "2026-05-14T12:00:00Z"}},
                 "ABC",
             ),
+            (
+                {"loginToken": "CLUB_JWT"},
+                "CLUB_JWT",
+            ),
         ],
     )
     def test_extract_access_token__happy_path(self, login_result, expected) -> None:
@@ -520,6 +525,8 @@ class TestLogin:
             {"accessToken": {}},
             {"accessToken": {"token": ""}},
             {"accessToken": {"token": None}},
+            {"loginToken": ""},
+            {"loginToken": None},
         ],
     )
     def test_extract_access_token__bad_shape_raises(self, login_result) -> None:
@@ -567,6 +574,26 @@ class TestLogin:
 
     @pytest.mark.asyncio
     @patch("aiohttp.ClientSession.post")
+    async def test_club_login__happy_path(self, mock_post) -> None:
+        """`SpondClub.login()` posts to `/club/v1/login` and extracts `loginToken`."""
+        mock_response = {
+            "loginToken": "CLUB_TOKEN_123",
+        }
+        mock_post.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_response
+        )
+
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        await sc.login()
+
+        mock_post.assert_called_once_with(
+            "https://api.spond.com/club/v1/login",
+            json={"email": MOCK_USERNAME, "password": MOCK_PASSWORD},
+        )
+        assert sc.token == "CLUB_TOKEN_123"
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.post")
     async def test_login__error_response_raises(self, mock_post) -> None:
         mock_post.return_value.__aenter__.return_value.json = AsyncMock(
             return_value={"error": "Invalid credentials"}
@@ -576,6 +603,179 @@ class TestLogin:
         with pytest.raises(AuthenticationError):
             await s.login()
         assert s.token is None
+
+
+class TestSpondClubMethods:
+    MOCK_CLUB_ID = "CLUB123"
+    MOCK_CLUBS: list[JSONDict] = [
+        {"id": "CLUB123", "shortId": "myclub", "name": "My Club"}
+    ]
+    MOCK_MEMBERS: list[JSONDict] = [
+        {
+            "id": "MEM1",
+            "firstName": "Alice",
+            "lastName": "Smith",
+            "profile": {"email": "alice@example.invalid"},
+        },
+        {
+            "id": "MEM2",
+            "firstName": "Bob",
+            "lastName": "Jones",
+            "profile": {"email": "bob@example.invalid"},
+        },
+    ]
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_clubs__happy_path(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=self.MOCK_CLUBS
+        )
+
+        clubs = await sc.get_clubs()
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/clubs",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+            },
+        )
+        assert clubs == self.MOCK_CLUBS
+        assert sc.clubs == self.MOCK_CLUBS
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_members__happy_path(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=self.MOCK_MEMBERS
+        )
+
+        members = await sc.get_members(club_id=self.MOCK_CLUB_ID)
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/members",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+            params=None,
+        )
+        assert members == self.MOCK_MEMBERS
+        assert sc.members == self.MOCK_MEMBERS
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_members__with_filters(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=[self.MOCK_MEMBERS[0]]
+        )
+
+        members = await sc.get_members(
+            club_id=self.MOCK_CLUB_ID,
+            include_processed=False,
+            include_unprocessed=True,
+            include_deleted=False,
+        )
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/members",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+            params={
+                "includeProcessed": "false",
+                "includeUnprocessed": "true",
+                "includeDeleted": "false",
+            },
+        )
+        assert len(members) == 1
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_members__api_error_raises_valueerror(
+        self, mock_get, mock_token
+    ) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_get.return_value.__aenter__.return_value.ok = False
+        mock_get.return_value.__aenter__.return_value.status = 403
+        mock_get.return_value.__aenter__.return_value.text = AsyncMock(
+            return_value="Forbidden"
+        )
+
+        with pytest.raises(ValueError, match="403"):
+            await sc.get_members(club_id=self.MOCK_CLUB_ID)
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_member__happy_path(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=self.MOCK_MEMBERS[0]
+        )
+
+        member = await sc.get_member(club_id=self.MOCK_CLUB_ID, member_id="MEM1")
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/members/MEM1",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+        )
+        assert member == self.MOCK_MEMBERS[0]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("member_id", ["", None])
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_member__blank_id_raises_keyerror(
+        self, mock_get, member_id, mock_token
+    ) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        with pytest.raises(KeyError):
+            await sc.get_member(club_id=self.MOCK_CLUB_ID, member_id=member_id)
+        mock_get.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_member__not_found_raises_keyerror(
+        self, mock_get, mock_token
+    ) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_get.return_value.__aenter__.return_value.ok = False
+        mock_get.return_value.__aenter__.return_value.status = 404
+
+        with pytest.raises(KeyError):
+            await sc.get_member(club_id=self.MOCK_CLUB_ID, member_id="UNKNOWN")
 
 
 class TestRequireAuthenticationDecorator:

@@ -18,6 +18,7 @@ MAX_EVENTS = 10
 MAX_CHATS = 10
 MAX_POSTS = 10
 MAX_TRANSACTIONS = 10
+MAX_CLUB_MEMBERS = 10
 
 
 async def main() -> None:
@@ -79,6 +80,13 @@ async def main() -> None:
 
     # SPOND CLUB
     sc = club.SpondClub(username=username, password=password)
+
+    print("\nGetting club members...")
+    club_members = await sc.get_members(club_id=club_id)
+    print(f"{len(club_members)} club members (showing up to {MAX_CLUB_MEMBERS}):")
+    for i, m in enumerate(club_members[:MAX_CLUB_MEMBERS]):
+        print(f"[{i}] {_club_member_summary(m)}")
+
     print(f"\nGetting up to {MAX_TRANSACTIONS} transactions...")
 
     # Transactions
@@ -125,6 +133,14 @@ def _chat_summary(chat: JSONDict) -> str:
 def _post_summary(post: JSONDict) -> str:
     return (
         f"id='{post['id']}', timestamp='{post['timestamp']}', title='{post['title']}'"
+    )
+
+
+def _club_member_summary(member: JSONDict) -> str:
+    return (
+        f"id='{member.get('id')}', "
+        f"firstName='{member.get('firstName')}', "
+        f"lastName='{member.get('lastName')}'"
     )
 
 

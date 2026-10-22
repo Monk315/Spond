@@ -1,7 +1,7 @@
 # Spond
 ![spond logo](https://github.com/Olen/Spond/blob/main/images/spond-logo.png?raw=true)
 
-Simple, unofficial library with some example scripts to access data from the [Spond](https://spond.com/) API.
+Simple, unofficial library with some example scripts to access data from the [Spond](https://spond.com/) and [Spond Club](https://club.spond.com/) APIs.
 
 ## Install
 
@@ -42,6 +42,26 @@ asyncio.run(main())
 
 ```
 
+### Spond Club API (`club/v1`)
+
+```python
+import asyncio
+from spond.club import SpondClub
+
+username = 'my@mail.invalid'
+password = 'Pa55worD'
+club_id = '1234567890'
+
+async def main():
+    sc = SpondClub(username=username, password=password)
+    members = await sc.get_members(club_id=club_id)
+    for member in members:
+        print(member.get('firstName'), member.get('lastName'))
+    await sc.clientsession.close()
+
+asyncio.run(main())
+```
+
 ## Key methods
 
 ### get_groups()
@@ -76,6 +96,20 @@ Retrieve posts from group walls.
 ### get_profile()
 Retrieve information connected to the user's account.
 
+## Spond Club methods (`spond.club.SpondClub`)
+
+### get_clubs()
+Retrieve all Spond Club organisations accessible to the authenticated account.
+
+### get_members(club_id, *, include_processed=None, include_unprocessed=None, include_deleted=None)
+Retrieve members of a Spond Club (`https://api.spond.com/club/v1/members`).
+
+### get_member(club_id, member_id)
+Retrieve a single Spond Club member by ID (`https://api.spond.com/club/v1/members/{member_id}`).
+
+### get_transactions(club_id, skip=None, max_items=100)
+Retrieve payments/transactions for a Spond Club.
+
 ## Example scripts
 
 The following scripts are included in `examples/`.  Some of the scripts might require additional packages to be installed (csv, ical etc).
@@ -90,6 +124,9 @@ Generates a json-file for each group you are a member of.
 
 ### attendance.py &lt;-f from_date&gt; &lt;-t to_date&gt; [-a]
 Generates a csv-file for each event between `from_date` and `to_date` with attendance status of all organizers.  The optional parameter `-a` also includes all members that has been invited.
+
+### club_members.py [-u] [-d]
+Generates a csv-file for club members from [Spond Club](https://club.spond.com/) (`club/v1/members`). Automatically discovers your first `club_id` via `get_clubs()` if `club_id` is left at the sample placeholder.
 
 ### transactions.py
 Generates a csv-file for transactions / payments appeared in [Spond Club](https://www.spond.com/spond-club-overview/) > Finance > Payments.

@@ -1,9 +1,9 @@
 """Shared base class for Spond API clients.
 
 `_SpondBase` is the abstract parent of both `spond.spond.Spond` (consumer API)
-and `spond.club.SpondClub` (Spond Club finance API). It owns the credentials,
-the underlying aiohttp `ClientSession`, the access token, and the lazy login
-flow used by the `require_authentication` decorator.
+and `spond.club.SpondClub` (Spond Club administration and finance API). It owns
+the credentials, the underlying aiohttp `ClientSession`, the access token, and
+the lazy login flow used by the `require_authentication` decorator.
 
 Not intended to be instantiated directly — use a subclass.
 """
@@ -11,6 +11,7 @@ Not intended to be instantiated directly — use a subclass.
 import functools
 from abc import ABC
 from collections.abc import Callable
+from typing import ClassVar
 
 import aiohttp
 
@@ -30,6 +31,8 @@ class _SpondBase(ABC):
     and inherit lazy authentication, the `auth_headers` property, the
     `require_authentication` decorator, and the `login()` flow.
     """
+
+    _LOGIN_ENDPOINT: ClassVar[str] = "auth2/login"
 
     def __init__(self, username: str, password: str, api_url: str) -> None:
         """Initialise credentials and open the aiohttp session.
@@ -88,7 +91,7 @@ class _SpondBase(ABC):
         AuthenticationError
             If the server response does not include a usable access token.
         """
-        login_url = f"{self.api_url}auth2/login"
+        login_url = f"{self.api_url}{self._LOGIN_ENDPOINT}"
         data = {"email": self.username, "password": self.password}
         async with self.clientsession.post(login_url, json=data) as r:
             login_result = await r.json()
@@ -96,12 +99,17 @@ class _SpondBase(ABC):
 
     @staticmethod
     def _extract_access_token(login_result: dict) -> str:
-        """Pull the access-token string out of a `/auth2/login` response.
+        """Pull the access-token string out of a Spond login response.
 
-        The response shape is
-        `{"accessToken": {"token": "<JWT>", "expiration": "..."}, ...}`.
-        This helper validates that shape and returns the bearer string used
-        for subsequent API calls.
+        Supports both response shapes used across Spond API families:
+
+        - Consumer API (`/core/v1/auth2/login`):
+          `{"accessToken": {"token": "<JWT>", "expiration": "..."}, ...}`
+        - Club API (`/club/v1/login`):
+          `{"loginToken": "<JWT>"}`
+
+        This helper validates the response shape and returns the bearer string
+        used for subsequent API calls.
 
         Parameters
         ----------
@@ -124,6 +132,9 @@ class _SpondBase(ABC):
             token = access.get("token")
             if isinstance(token, str) and token:
                 return token
+        login_token = login_result.get("loginToken")
+        if isinstance(login_token, str) and login_token:
+            return login_token
         safe = {
             k: login_result[k] for k in _SAFE_LOGIN_ERROR_FIELDS if k in login_result
         }
