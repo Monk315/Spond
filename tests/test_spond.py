@@ -777,6 +777,173 @@ class TestSpondClubMethods:
         with pytest.raises(KeyError):
             await sc.get_member(club_id=self.MOCK_CLUB_ID, member_id="UNKNOWN")
 
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_payments__happy_path(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_payments = [{"id": "PAY1", "title": "Dues"}]
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_payments
+        )
+
+        payments = await sc.get_payments(club_id=self.MOCK_CLUB_ID)
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/payments/",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+        )
+        assert payments == mock_payments
+        assert sc.payments == mock_payments
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_payments__group_payments(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(return_value=[])
+
+        await sc.get_payments(club_id=self.MOCK_CLUB_ID, group_payments=True)
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/payments/groupPayments/",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+        )
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_payment__happy_path(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_payment = {"id": "PAY1", "title": "Dues", "recipients": []}
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_payment
+        )
+
+        payment = await sc.get_payment(club_id=self.MOCK_CLUB_ID, payment_id="PAY1")
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/payments/PAY1",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+            params={"includeSignupRequestRecipients": "true"},
+        )
+        assert payment == mock_payment
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("payment_id", ["", None])
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_payment__blank_id_raises_keyerror(
+        self, mock_get, payment_id, mock_token
+    ) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        with pytest.raises(KeyError):
+            await sc.get_payment(club_id=self.MOCK_CLUB_ID, payment_id=payment_id)
+        mock_get.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_payment_performed_payments__happy_path(
+        self, mock_get, mock_token
+    ) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_records = [{"id": "PERF1", "amount": 100}]
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_records
+        )
+
+        res = await sc.get_payment_performed_payments(
+            club_id=self.MOCK_CLUB_ID, payment_id="PAY1"
+        )
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/payments/PAY1/performedPayments",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+        )
+        assert res == mock_records
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_payouts__happy_path(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_payouts = [{"id": "po_1", "amount": 50000}]
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_payouts
+        )
+
+        payouts = await sc.get_payouts(club_id=self.MOCK_CLUB_ID)
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/payouts",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+        )
+        assert payouts == mock_payouts
+        assert sc.payouts == mock_payouts
+
+    @pytest.mark.asyncio
+    @patch("aiohttp.ClientSession.get")
+    async def test_get_payout_accounts__happy_path(self, mock_get, mock_token) -> None:
+        sc = SpondClub(MOCK_USERNAME, MOCK_PASSWORD)
+        sc.token = mock_token
+
+        mock_accounts = [{"id": "acct_1", "name": "Checking"}]
+        mock_get.return_value.__aenter__.return_value.ok = True
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=mock_accounts
+        )
+
+        accounts = await sc.get_payout_accounts(club_id=self.MOCK_CLUB_ID)
+
+        mock_get.assert_called_once_with(
+            "https://api.spond.com/club/v1/payoutAccounts",
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {mock_token}",
+                "X-Spond-Clubid": self.MOCK_CLUB_ID,
+            },
+        )
+        assert accounts == mock_accounts
+        assert sc.payout_accounts == mock_accounts
+
 
 class TestRequireAuthenticationDecorator:
     """The `require_authentication` decorator must preserve the wrapped

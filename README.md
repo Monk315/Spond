@@ -107,6 +107,21 @@ Retrieve members of a Spond Club (`https://api.spond.com/club/v1/members`).
 ### get_member(club_id, member_id)
 Retrieve a single Spond Club member by ID (`https://api.spond.com/club/v1/members/{member_id}`).
 
+### get_payments(club_id, *, group_payments=False)
+Retrieve payment requests/campaigns for a Spond Club (`https://api.spond.com/club/v1/payments/`).
+
+### get_payment(club_id, payment_id, *, include_signup_request_recipients=True)
+Retrieve full details of a payment request including `recipients` (who owes dues, amounts, and payment statuses).
+
+### get_payment_performed_payments(club_id, payment_id)
+Retrieve completed payments executed against a specific payment request.
+
+### get_payouts(club_id)
+Retrieve bank payouts / transfers sent from Spond to the club's bank account (`https://api.spond.com/club/v1/payouts`).
+
+### get_payout_accounts(club_id)
+Retrieve connected payout bank accounts (`https://api.spond.com/club/v1/payoutAccounts`).
+
 ### get_transactions(club_id, skip=None, max_items=100)
 Retrieve payments/transactions for a Spond Club.
 
@@ -128,8 +143,8 @@ Generates a csv-file for each event between `from_date` and `to_date` with atten
 ### club_members.py [-u] [-d]
 Generates a csv-file for club members from [Spond Club](https://club.spond.com/) (`club/v1/members`). Automatically discovers your first `club_id` via `get_clubs()` if `club_id` is left at the sample placeholder.
 
-### transactions.py
-Generates a csv-file for transactions / payments appeared in [Spond Club](https://www.spond.com/spond-club-overview/) > Finance > Payments.
+### transactions.py [-m MAX] [--transactions-only] [--payments-only] [--payouts-only]
+Exports Spond Club financial data (`transactions.csv`, `payments.csv`, `payment_recipients.csv`, and `payouts.csv`) for data lake ingestion and reporting. Automatically resolves `club_id` from name/shortId if needed.
 
 ### manual_test_functions.py
 Demonstrates most `get...()` methods.

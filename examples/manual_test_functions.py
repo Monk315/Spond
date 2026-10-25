@@ -10,7 +10,7 @@ import asyncio
 import tempfile
 
 from config import club_id, password, username
-from spond import club, spond, JSONDict
+from spond import JSONDict, club, spond
 
 DUMMY_ID = "DUMMY_ID"
 
@@ -19,6 +19,8 @@ MAX_CHATS = 10
 MAX_POSTS = 10
 MAX_TRANSACTIONS = 10
 MAX_CLUB_MEMBERS = 10
+MAX_PAYMENTS = 10
+MAX_PAYOUTS = 10
 
 
 async def main() -> None:
@@ -81,22 +83,46 @@ async def main() -> None:
     # SPOND CLUB
     sc = club.SpondClub(username=username, password=password)
 
+    # Resolve club_id if needed
+    target_club_id = club_id
+    if (
+        not target_club_id
+        or len(target_club_id) != 32
+        or target_club_id == "1234567890"
+    ):
+        clubs = await sc.get_clubs()
+        if clubs:
+            target_club_id = clubs[0]["id"]
+            print(
+                f"Using discovered club: {clubs[0].get('name')} (id={target_club_id})"
+            )
+
     print("\nGetting club members...")
-    club_members = await sc.get_members(club_id=club_id)
+    club_members = await sc.get_members(club_id=target_club_id)
     print(f"{len(club_members)} club members (showing up to {MAX_CLUB_MEMBERS}):")
     for i, m in enumerate(club_members[:MAX_CLUB_MEMBERS]):
         print(f"[{i}] {_club_member_summary(m)}")
 
     print(f"\nGetting up to {MAX_TRANSACTIONS} transactions...")
-
-    # Transactions
     transactions = await sc.get_transactions(
-        club_id=club_id,
+        club_id=target_club_id,
         max_items=MAX_TRANSACTIONS,
     )
     print(f"{len(transactions)} transactions:")
     for i, t in enumerate(transactions):
         print(f"[{i}] {_transaction_summary(t)}")
+
+    print("\nGetting payment requests...")
+    payments = await sc.get_payments(club_id=target_club_id)
+    print(f"{len(payments)} payment requests:")
+    for i, p in enumerate(payments[:MAX_PAYMENTS]):
+        print(f"[{i}] {_payment_summary(p)}")
+
+    print("\nGetting payouts...")
+    payouts = await sc.get_payouts(club_id=target_club_id)
+    print(f"{len(payouts)} payouts:")
+    for i, po in enumerate(payouts[:MAX_PAYOUTS]):
+        print(f"[{i}] {_payout_summary(po)}")
 
     await sc.clientsession.close()
 
@@ -150,6 +176,23 @@ def _transaction_summary(transaction: JSONDict) -> str:
         f"timestamp='{transaction['paidAt']}', "
         f"payment_name='{transaction['paymentName']}', "
         f"name={transaction['paidByName']}"
+    )
+
+
+def _payment_summary(payment: JSONDict) -> str:
+    return (
+        f"id='{payment.get('id')}', "
+        f"title='{payment.get('title')}', "
+        f"deadline='{payment.get('deadline')}'"
+    )
+
+
+def _payout_summary(payout: JSONDict) -> str:
+    return (
+        f"id='{payout.get('id')}', "
+        f"amount='{payout.get('amount')}', "
+        f"currency='{payout.get('currency')}', "
+        f"arrivalTime='{payout.get('arrivalTime')}'"
     )
 
 

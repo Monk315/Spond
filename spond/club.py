@@ -63,6 +63,9 @@ class SpondClub(_SpondBase):
         self.clubs: list[JSONDict] | None = None
         self.members: list[JSONDict] | None = None
         self.transactions: list[JSONDict] | None = None
+        self.payments: list[JSONDict] | None = None
+        self.payouts: list[JSONDict] | None = None
+        self.payout_accounts: list[JSONDict] | None = None
 
     def _club_headers(self, club_id: str) -> dict[str, str]:
         """Return authenticated request headers scoped to `club_id`."""
@@ -205,6 +208,216 @@ class SpondClub(_SpondBase):
                     f"Request failed with status {r.status}: {error_details}"
                 )
             return await r.json()
+
+    @_SpondBase.require_authentication
+    async def get_payments(
+        self, club_id: str, *, group_payments: bool = False
+    ) -> list[JSONDict]:
+        """Retrieve payment requests/campaigns for a Spond Club.
+
+        Queries `GET https://api.spond.com/club/v1/payments/` (or
+        `payments/groupPayments/` when `group_payments=True`).
+
+        Parameters
+        ----------
+        club_id : str
+            Identifier for the club (`X-Spond-Clubid` header).
+        group_payments : bool, optional
+            If True, retrieves group-level payments instead of club-wide
+            payment requests. Defaults to False.
+
+        Returns
+        -------
+        list[JSONDict]
+            List of payment request dictionaries (e.g. dues campaigns, kit
+            orders), each typically containing `id`, `title`, `description`,
+            `deadline`, `payoutAccount`, `paymentSummary`, etc.
+
+        Raises
+        ------
+        ValueError
+            If the API request fails (non-2xx response).
+        """
+        subpath = "payments/groupPayments/" if group_payments else "payments/"
+        url = f"{self.api_url}{subpath}"
+        async with self.clientsession.get(
+            url, headers=self._club_headers(club_id)
+        ) as r:
+            if not r.ok:
+                error_details = await r.text()
+                raise ValueError(
+                    f"Request failed with status {r.status}: {error_details}"
+                )
+            self.payments = await r.json()
+            return self.payments
+
+    @_SpondBase.require_authentication
+    async def get_payment(
+        self,
+        club_id: str,
+        payment_id: str,
+        *,
+        include_signup_request_recipients: bool = True,
+    ) -> JSONDict:
+        """Retrieve full details of a payment request including recipients.
+
+        Queries `GET https://api.spond.com/club/v1/payments/{payment_id}`.
+
+        Parameters
+        ----------
+        club_id : str
+            Identifier for the club (`X-Spond-Clubid` header).
+        payment_id : str
+            Unique identifier of the payment request.
+        include_signup_request_recipients : bool, optional
+            Whether to include recipients from signup requests. Defaults to
+            True.
+
+        Returns
+        -------
+        JSONDict
+            Full payment request object, including `recipients` (with member
+            IDs, statuses such as PAID/UNPAID, amounts, and discounts) and
+            `recipientCategories`.
+
+        Raises
+        ------
+        KeyError
+            If `payment_id` is blank or not found (HTTP 404).
+        ValueError
+            If the API request fails with another non-2xx status.
+        """
+        if not payment_id:
+            raise KeyError(f"No payment with id='{payment_id}'.")
+        url = f"{self.api_url}payments/{payment_id}"
+        params = {
+            "includeSignupRequestRecipients": str(
+                include_signup_request_recipients
+            ).lower()
+        }
+        async with self.clientsession.get(
+            url, headers=self._club_headers(club_id), params=params
+        ) as r:
+            if r.status == 404:
+                raise KeyError(f"No payment with id='{payment_id}'.")
+            if not r.ok:
+                error_details = await r.text()
+                raise ValueError(
+                    f"Request failed with status {r.status}: {error_details}"
+                )
+            return await r.json()
+
+    @_SpondBase.require_authentication
+    async def get_payment_performed_payments(
+        self, club_id: str, payment_id: str
+    ) -> list[JSONDict]:
+        """Retrieve completed payments made against a specific payment request.
+
+        Queries `GET https://api.spond.com/club/v1/payments/{payment_id}/performedPayments`.
+
+        Parameters
+        ----------
+        club_id : str
+            Identifier for the club (`X-Spond-Clubid` header).
+        payment_id : str
+            Unique identifier of the payment request.
+
+        Returns
+        -------
+        list[JSONDict]
+            List of payment execution objects recorded for that request.
+
+        Raises
+        ------
+        KeyError
+            If `payment_id` is blank or not found (HTTP 404).
+        ValueError
+            If the API request fails with another non-2xx status.
+        """
+        if not payment_id:
+            raise KeyError(f"No payment with id='{payment_id}'.")
+        url = f"{self.api_url}payments/{payment_id}/performedPayments"
+        async with self.clientsession.get(
+            url, headers=self._club_headers(club_id)
+        ) as r:
+            if r.status == 404:
+                raise KeyError(f"No payment with id='{payment_id}'.")
+            if not r.ok:
+                error_details = await r.text()
+                raise ValueError(
+                    f"Request failed with status {r.status}: {error_details}"
+                )
+            return await r.json()
+
+    @_SpondBase.require_authentication
+    async def get_payouts(self, club_id: str) -> list[JSONDict]:
+        """Retrieve bank disbursements/payouts for a Spond Club.
+
+        Queries `GET https://api.spond.com/club/v1/payouts`.
+
+        Parameters
+        ----------
+        club_id : str
+            Identifier for the club (`X-Spond-Clubid` header).
+
+        Returns
+        -------
+        list[JSONDict]
+            List of payouts transferred from Spond to the club's bank account,
+            typically containing `id`, `amount`, `currency`, `createTime`,
+            `arrivalTime`, `accountId`, `accountName`, `accountLastDigits`.
+
+        Raises
+        ------
+        ValueError
+            If the API request fails (non-2xx response).
+        """
+        url = f"{self.api_url}payouts"
+        async with self.clientsession.get(
+            url, headers=self._club_headers(club_id)
+        ) as r:
+            if not r.ok:
+                error_details = await r.text()
+                raise ValueError(
+                    f"Request failed with status {r.status}: {error_details}"
+                )
+            self.payouts = await r.json()
+            return self.payouts
+
+    @_SpondBase.require_authentication
+    async def get_payout_accounts(self, club_id: str) -> list[JSONDict]:
+        """Retrieve connected payout bank accounts for a Spond Club.
+
+        Queries `GET https://api.spond.com/club/v1/payoutAccounts`.
+
+        Parameters
+        ----------
+        club_id : str
+            Identifier for the club (`X-Spond-Clubid` header).
+
+        Returns
+        -------
+        list[JSONDict]
+            List of payout account dicts (Stripe-connected accounts),
+            typically containing `id`, `name`, `currency`, `accountLastDigits`,
+            `status`, `payoutsEnabled`, etc.
+
+        Raises
+        ------
+        ValueError
+            If the API request fails (non-2xx response).
+        """
+        url = f"{self.api_url}payoutAccounts"
+        async with self.clientsession.get(
+            url, headers=self._club_headers(club_id)
+        ) as r:
+            if not r.ok:
+                error_details = await r.text()
+                raise ValueError(
+                    f"Request failed with status {r.status}: {error_details}"
+                )
+            self.payout_accounts = await r.json()
+            return self.payout_accounts
 
     @_SpondBase.require_authentication
     async def get_transactions(
